@@ -11,8 +11,14 @@ import (
 func drawChart(res http.ResponseWriter, req *http.Request) {
 	fmt.Println("Drawing")
 	graph := chart.Heatmap{
-		Width:  1000,
+		Width:  2000,
 		Height: 1000,
+		ColLabels: []string{
+			"a", "b", "c", "d", "e",
+		},
+		RowLabels: []string{
+			"1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+		},
 		Grid: [][]float64{
 			[]float64{1, 27, 3, 4, 135, 64, 7, 8, 9, 101},
 			[]float64{11, 12, 13, 14, 15, 16, 17, 15, 19, 20},

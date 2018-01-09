@@ -9,11 +9,18 @@ import (
 
 // A Heatmap is a row of Histograms.
 type Heatmap struct {
-	Title  string
-	Width  int
-	Height int
-	DPI    float64
-	Grid   [][]float64
+	Title     string
+	Width     int
+	Height    int
+	DPI       float64
+	Grid      [][]float64
+	RowLabels []string
+	ColLabels []string
+}
+
+type Column struct {
+	Label  string
+	Values []float64
 }
 
 type cell struct {
@@ -31,8 +38,15 @@ func (h Heatmap) Render(rp RendererProvider, w io.Writer) error {
 	columnLen := len(h.Grid[0])
 	for _, column := range h.Grid {
 		if len(column) != columnLen {
-			return errors.New("Heatmap columns must all have the same length")
+			return errors.New("Heatmap columns must all be the same length")
 		}
+	}
+
+	if len(h.RowLabels) != len(h.Grid[0]) {
+		return errors.New("Number of row labels != number of rows")
+	}
+	if len(h.ColLabels) != len(h.Grid) {
+		return errors.New("Number of col lables != number of cols")
 	}
 
 	r, err := rp(h.Width, h.Height)
@@ -43,27 +57,24 @@ func (h Heatmap) Render(rp RendererProvider, w io.Writer) error {
 	r.SetDPI(DefaultDPI)
 	h.drawBackground(r)
 
-	canvasBox := h.box()
-	cellWidth, cellHeight := computeCellSize(
-		canvasBox.Width(),
-		canvasBox.Height(),
-		len(h.Grid),
-		len(h.Grid[0]),
-	)
-	cells := computeCells(h.Grid, cellWidth, cellHeight)
+	gridBox := h.gridBox()
+	cells := h.computeCells(h.Grid, gridBox)
 	for _, cell := range cells {
 		h.drawCell(r, cell)
 	}
+
+	Draw.Box(r, h.columnLabelBox(), Style{
+		FillColor: drawing.ColorRed,
+	})
+	Draw.Box(r, h.rowLabelBox(), Style{
+		FillColor: drawing.ColorGreen,
+	})
 
 	return r.Save(w)
 }
 
 func (h *Heatmap) drawBackground(r Renderer) {
-	Draw.Box(r,
-		Box{
-			Right:  h.Width,
-			Bottom: h.Width,
-		},
+	Draw.Box(r, h.box(),
 		Style{
 			FillColor:   drawing.ColorBlack,
 			StrokeColor: drawing.ColorBlack,
@@ -77,17 +88,23 @@ func computeCellSize(maxW int, maxH int, ncols int, nrows int) (w int, h int) {
 	return
 }
 
-func computeCells(grid [][]float64, cellWidth int, cellHeight int) []cell {
+func (h *Heatmap) computeCells(grid [][]float64, box Box) []cell {
+	cellWidth, cellHeight := computeCellSize(
+		box.Width(),
+		box.Height(),
+		len(h.Grid),
+		len(h.Grid[0]),
+	)
 	var cells []cell
 	for ci, column := range grid {
 		for ri, value := range column {
 			cells = append(cells, cell{
 				Value: value,
 				Box: Box{
-					Top:    ri * cellHeight,
-					Bottom: (ri + 1) * cellHeight,
-					Left:   ci * cellWidth,
-					Right:  (ci + 1) * cellWidth,
+					Top:    box.Top + ri*cellHeight,
+					Bottom: box.Top + (ri+1)*cellHeight,
+					Left:   box.Left + ci*cellWidth,
+					Right:  box.Left + (ci+1)*cellWidth,
 				},
 			})
 		}
@@ -117,14 +134,44 @@ func (h *Heatmap) computeColor(value float64) drawing.Color {
 
 // box returns the chart bounds as a box.
 func (h *Heatmap) box() Box {
-	dpr := 10
-	dpb := 10
+	return Box{
+		Top:    0,
+		Left:   0,
+		Right:  h.Width,
+		Bottom: h.Height,
+	}
+}
+
+func (h *Heatmap) gridBox() Box {
+	clb := h.columnLabelBox()
+	rlb := h.rowLabelBox()
 
 	return Box{
-		Top:    20,
-		Left:   20,
-		Right:  h.Width - dpr,
-		Bottom: h.Height - dpb,
+		Top:    clb.Bottom,
+		Left:   rlb.Right,
+		Right:  h.Width,
+		Bottom: h.Height,
+	}
+}
+
+func (h *Heatmap) columnLabelBox() Box {
+	box := h.box()
+	rlb := h.rowLabelBox()
+
+	return Box{
+		Top:    0,
+		Left:   rlb.Right,
+		Right:  box.Right,
+		Bottom: 300,
+	}
+}
+
+func (h *Heatmap) rowLabelBox() Box {
+	return Box{
+		Top:    0,
+		Left:   0,
+		Right:  300,
+		Bottom: h.Height,
 	}
 }
 

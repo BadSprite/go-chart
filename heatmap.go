@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/golang/freetype/truetype"
 	"github.com/wcharczuk/go-chart/drawing"
 )
 
@@ -57,8 +58,8 @@ func (h Heatmap) Render(rp RendererProvider, w io.Writer) error {
 	r.SetDPI(DefaultDPI)
 	h.drawBackground(r)
 
-	gridBox := h.gridBox()
-	cells := h.computeCells(h.Grid, gridBox)
+	cellsBox := h.cellsBox()
+	cells := h.computeCells(h.Grid, cellsBox)
 	for _, cell := range cells {
 		h.drawCell(r, cell)
 	}
@@ -70,6 +71,12 @@ func (h Heatmap) Render(rp RendererProvider, w io.Writer) error {
 		FillColor: drawing.ColorGreen,
 	})
 
+	for col, label := range h.ColLabels {
+		h.drawColumnLabel(r, label, cells[col*len(h.Grid[0])])
+	}
+	for row, label := range h.RowLabels {
+		h.drawRowLabel(r, label, cells[row])
+	}
 	return r.Save(w)
 }
 
@@ -82,19 +89,16 @@ func (h *Heatmap) drawBackground(r Renderer) {
 		})
 }
 
-func computeCellSize(maxW int, maxH int, ncols int, nrows int) (w int, h int) {
+func (hm *Heatmap) computeCellSize(maxW int, maxH int) (w int, h int) {
+	ncols := len(hm.Grid)
+	nrows := len(hm.Grid[0])
 	w = int(float64(maxW) / float64(ncols))
 	h = int(float64(maxH) / float64(nrows))
 	return
 }
 
 func (h *Heatmap) computeCells(grid [][]float64, box Box) []cell {
-	cellWidth, cellHeight := computeCellSize(
-		box.Width(),
-		box.Height(),
-		len(h.Grid),
-		len(h.Grid[0]),
-	)
+	cellWidth, cellHeight := h.computeCellSize(box.Width(), box.Height())
 	var cells []cell
 	for ci, column := range grid {
 		for ri, value := range column {
@@ -119,9 +123,37 @@ func (h *Heatmap) drawCell(r Renderer, cell cell) {
 		FillColor:   h.computeColor(value),
 		StrokeColor: drawing.ColorBlack,
 	})
-	Draw.TextWithin(r, string(int(value)), box, Style{
-		FontColor: drawing.ColorBlack,
+}
+
+func (h *Heatmap) drawColumnLabel(r Renderer, label string, topCell cell) {
+	labelX := topCell.Box.Left + topCell.Box.Width()/2.0
+	labelY := topCell.Box.Top - 10
+
+	Draw.Text(r, label, labelX, labelY, Style{
+		FontColor:           drawing.ColorBlack,
+		FontSize:            18,
+		Font:                h.font(),
+		TextRotationDegrees: -90,
 	})
+}
+
+func (h *Heatmap) drawRowLabel(r Renderer, label string, leftCell cell) {
+	labelX := 0
+	labelY := leftCell.Box.Top + leftCell.Box.Height()/2.0
+
+	Draw.Text(r, label, labelX, labelY, Style{
+		FontColor: drawing.ColorBlack,
+		FontSize:  18,
+		Font:      h.font(),
+	})
+}
+func (h *Heatmap) font() *truetype.Font {
+	// box := h.cellsBox()
+	f, err := GetDefaultFont()
+	if err != nil {
+		panic(err)
+	}
+	return f
 }
 
 func (h *Heatmap) computeColor(value float64) drawing.Color {
@@ -142,7 +174,7 @@ func (h *Heatmap) box() Box {
 	}
 }
 
-func (h *Heatmap) gridBox() Box {
+func (h *Heatmap) cellsBox() Box {
 	clb := h.columnLabelBox()
 	rlb := h.rowLabelBox()
 
